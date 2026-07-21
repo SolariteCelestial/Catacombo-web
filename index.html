@@ -1,0 +1,1721 @@
+<html> <head> <title>Catacombo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+	
+<style> 
+	@font-face { font-family:
+'sina'; src: url('./sina.otf') format('truetype'); font-weight: normal;
+font-style: normal; }  
+
+	html, body {
+		margin: 0;
+		padding: 0;
+		width: 100%;
+		height: 100%;
+		overflow: hidden;
+		background: #000;
+		touch-action: none;
+		-webkit-user-select: none;
+		user-select: none;
+		-webkit-touch-callout: none;
+	}
+	#c {
+		touch-action: none;
+		-webkit-user-select: none;
+		user-select: none;
+	}
+</style>
+
+<!--<script src=externalfile.js></script>-->
+<!--<script src=dictionary.js></script>-->
+
+<script language=Javascript>
+
+var ctx;
+var keysdown=Array();
+var gamemode=0;
+var screenshake=0;
+var flags=Array();
+var permaflags=Array();
+var loop1;
+var soundstarted=false;
+var particles=Array();
+var thequeue=Array();
+var cards=Array(); // the cards currently on the screen for whatever mode we're in
+var draggingCard=null;
+var gamewidth=1200;
+var gameheight=900;
+var noinputs;
+var currentmessage="";
+var currentmessagetime=0;
+var currentmessagex;
+var currentmessagey;
+var hp, maxhp;
+var sanity, maxsanity;
+var playerclass,playerlocation,playerclassid;
+var defeatx,defeaty;
+var lastmousex,lastmousey;
+var statcardposition=50, dungeoncardposition=50, abovestatcardposition=50;
+var dungeon; // holder object for level gen diverticula
+var currentevent=0;
+var gametimer;
+var treasure;
+var statuesize=0;
+var currentzone;
+var runprogress;
+var frame=0;
+var sanitybonus=0, hpbonus=0;
+var movesthislevel=0;
+var timepassing=0;
+var soundsthisframe=0;
+var godmode=0; // testing
+var refundedtreasure=0;
+
+function init() {
+	canvas = document.getElementById("c");
+	ctx = canvas.getContext("2d");
+	setInterval("drawscreen()",10); // framerate
+
+	keysdown[37]=0; keysdown[38]=0; keysdown[39]=0; keysdown[40]=0; // wasd
+	keysdown[65]=0; keysdown[87]=0; keysdown[68]=0; keysdown[83]=0; // WASD
+	keysdown[32]=0; // space bar
+	if (localStorage.hasOwnProperty('permaflags')) permaflags=JSON.parse(localStorage.permaflags);
+
+	// Convert a client-space (mouse or touch) coordinate into canvas-internal
+	// coordinate space, accounting for the canvas being scaled via CSS to fit
+	// the screen (e.g. on a phone/tablet where displayed size != 1200x900).
+	function getPointerPos(clientX, clientY) {
+	  const rect = canvas.getBoundingClientRect();
+	  const scaleX = canvas.width / rect.width;
+	  const scaleY = canvas.height / rect.height;
+	  return {
+	    x: (clientX - rect.left) * scaleX,
+	    y: (clientY - rect.top) * scaleY
+	  };
+	}
+
+	function pointerDown(pointerX, pointerY) {
+		currentmessagetime=0;
+		if (currentevent) {
+				finishevent();
+				return;
+		}
+		if (thequeue.length) return;
+
+	  for (let card of cards) {
+	    if (card.isClicked(pointerX, pointerY) && card.cardtype!="dungeon") {
+	      draggingCard = card;
+	      card.startDrag(pointerX, pointerY);
+	      card.zoom=110;
+	      break;
+	    }
+	  }
+	  // start game if we're on the title screen
+	  if (gamemode==0) startgamephase(0);
+	  // or on the game over screen
+	  if (gamemode==9) startgamephase(0);
+		// or on the game win screen
+	  if (gamemode==10) startgamephase(0);
+	  // or reincarnate if we're in the character defeat screen
+	  if (gamemode==5) {
+	  	startgamephase(1);
+	  }
+	}
+
+	function pointerMove(pointerX, pointerY) {
+	  if (draggingCard) {
+	    lastmousex=pointerX;
+	    lastmousey=pointerY;
+	    draggingCard.drag(pointerX, pointerY);
+	  }
+	}
+
+	function pointerUp() {
+	  if (draggingCard) {
+	    draggingCard.stopDrag();
+	    draggingCard = null;
+	  }
+	}
+
+	// Mouse events
+	canvas.addEventListener('mousedown', (e) => {
+	  const pos = getPointerPos(e.clientX, e.clientY);
+	  pointerDown(pos.x, pos.y);
+	});
+
+	canvas.addEventListener('mousemove', (e) => {
+	  const pos = getPointerPos(e.clientX, e.clientY);
+	  pointerMove(pos.x, pos.y);
+	});
+
+	canvas.addEventListener('mouseup', () => {
+	  pointerUp();
+	});
+	canvas.addEventListener('mouseout', () => {
+	  pointerUp();
+	});
+
+	// Touch events (mirror the mouse events above for touch/tablet play)
+	canvas.addEventListener('touchstart', (e) => {
+	  e.preventDefault();
+	  const touch = e.changedTouches[0];
+	  const pos = getPointerPos(touch.clientX, touch.clientY);
+	  pointerDown(pos.x, pos.y);
+	}, { passive: false });
+
+	canvas.addEventListener('touchmove', (e) => {
+	  e.preventDefault();
+	  const touch = e.changedTouches[0];
+	  const pos = getPointerPos(touch.clientX, touch.clientY);
+	  pointerMove(pos.x, pos.y);
+	}, { passive: false });
+
+	canvas.addEventListener('touchend', (e) => {
+	  e.preventDefault();
+	  pointerUp();
+	}, { passive: false });
+
+	canvas.addEventListener('touchcancel', (e) => {
+	  e.preventDefault();
+	  pointerUp();
+	}, { passive: false });
+
+}
+
+function testlevel(whichone) {
+		godmode=1;
+		playerclassid='class112233';
+		playerlocation=whichone;
+		makecharacter(playerclassid);
+		startgamephase(3);
+}
+
+
+function startgamephase(phase=1) {
+	currentmessagetime=0;
+	particles=Array();
+	if (!soundstarted) startsound();
+	gamemode=phase;
+	switch(phase) {
+		case 0: // start the game from the beginning
+			changemusicspeed(.5,2000);
+			flags=Array();
+			statuesize=0;
+			runprogress=0;
+			sanitybonus=0;
+			hpbonus=0;
+			startgamephase(1);
+		case 1: // inhabit an adventurer
+			changemusicspeed(.5,2000);
+			for(var i=0;i<30;i++) addstar();
+			cards=Array();
+			dealcardfromto("soul",750,600); // put a soul on the board
+			//dealcardfromto("debug",850,600); // DEBUG
+			dealcardfromto("class1a",650,100); // there's always a laborer
+			// other classes will eventually depend on unlocks
+			if (hasflag("soldier")) dealcardfromto("class1b",900,150); // soldier
+			if (hasflag("scholar")) dealcardfromto("class2a",550,400); // scholar
+			if (hasflag("sage")) dealcardfromto("class2b",500,220); // sage
+			if (hasflag("dirtbag")) dealcardfromto("class3a",950,500); // dirtbag
+			if (hasflag("scoundrel")) dealcardfromto("class3b",1050,330); // scoundrel
+			break;
+		case 2: // select a location
+			changemusicspeed(.6);
+			timepassing=50; // time vfx
+			runprogress++; // advance game rounds
+			cards=Array();
+			travel=makecard("travel",card1.icon,playerclass+"'s Quest");
+			travel.x=550; travel.y=350; travel.desiredx=travel.x; travel.desiredy=travel.y;
+			cards.push(travel);
+			//var travelid=dealcard("travel","bottom",playerclass+"'s Quest");
+			//cards[travelid].icon=card1.icon;
+			dealcardfromto("graves",550,150);
+			if (hasflag("woods")) dealcardfromto("woods",750,350);
+			if (hasflag("village")) dealcardfromto("village",550,550);
+			if (hasflag("cave")) dealcardfromto("cave",350,350);
+			makecharacter(card2["id"]);
+			gamemode=2;
+			break;
+		case 3: // dungeon exploration
+			changemusicspeed(.7);
+			timepassing=50; 
+			movesthislevel=0;
+			cards=Array();
+			gamemode=3;
+			levelgen(playerlocation);
+			dealstartingcards();
+			dealplayercards();
+			break;
+		case 4: // town
+			refundedtreasure=0; // handle refunds to stop time from passing
+			changemusicspeed(.8);
+			timepassing=50;
+			gamemode=4;
+			cards=Array();
+			// exit here if we have treasure, and just go back to the location selection
+			// DEBUG
+			if (treasure==0) startgamephase(1);
+			else {
+				setcurrentmessage("You head back to town to spend your loot.");
+				if (!hasflag("scholar")) dealcardfromto("beggar_scholar",150,300);
+				if (!hasflag("woods")) dealcardfromto("explorer",750,300);
+				dealcardfromto("pawnshop",300,200);
+				dealcardfromto("saloon",900,200);
+				var statueid=dealcardfromto("townstatue",550,100);
+				if (statuesize) cards[statueid].label=statuesize+"-foot Golden Statue";
+				if (hasflag("church")) dealcardfromto("church",550,250);
+				statcardposition=100;
+				for (var i=0;i<treasure;i++) dealcard("money","stat");
+			}
+			break;
+		case 5: // character defeated
+			for(var i=0;i<30;i++) addstar();
+			cards=Array();
+			if (runprogress>13) {
+				changemusicspeed(1,5000);
+				gamemode=9; // game over
+			} else {
+				gamemode=5;
+				
+			}
+			break;
+	}
+
+}
+
+function gametick() {
+	if (noinputs>0) noinputs--;
+	frame++;
+	if (frame>100000) frame=1; // eh.
+	soundsthisframe=0; // spread out multiple sounds generated by the same event
+	processqueue()
+}
+
+function drawscreen() {
+	ctx.clearRect(0,0,gamewidth,gameheight);
+	if (gamemode==0) {
+		titlescreen();
+	}
+ if (gamemode==9) {
+		gameoverscreen();
+	}
+	if (gamemode==10) {
+		gamewinscreen();
+	}
+	if (gamemode==1 || gamemode==2 || gamemode==3 || gamemode==4 || gamemode==5)  {
+		gametick();
+		drawgame();
+	}
+	//drawparticles();
+	if (timepassing) {
+		timepassing--;
+		var zoom=100+(50-timepassing);
+		zoom=100; // that was too annoying
+		ctx.globalAlpha=(timepassing/200);
+		
+		ctx.drawImage(document.getElementById("bg_clock"),0,0,1200*zoom/100,900*zoom/100);
+		//putimage("bg_clock",0,0);
+		ctx.globalAlpha=1;
+	}
+}
+
+
+
+function drawcurrentmessage() {
+	ctx.font = "24px sina";
+	ctx.fillStyle='#000000';
+	//for(i=-1;i<1;i++) for(j=-1;j<1;j++) wrapText(ctx,currentmessage,currentmessagex-200+i,currentmessagey+j,400,24);
+	ctx.globalAlpha=.5;
+	ctx.fillStyle='#333333';
+	bgheight=70;
+	if(currentmessage.length>60) bgheight=95;
+	if(currentmessage.length>100) bgheight=120;
+	if(currentmessage.length<30) bgheight=45;
+	ctx.fillRect(currentmessagex-220,currentmessagey-30,440,bgheight);
+	ctx.globalAlpha=1;
+	ctx.fillStyle='#fae5d3';
+	wrapText(ctx,currentmessage,currentmessagex-200,currentmessagey,400,24);
+	currentmessagetime--;
+}
+
+function previewtext() {
+	if (!draggingCard) return;
+	//centertext("dragging card",600,880,"#666666");
+	c1="";
+	c2="";
+	c1x=0; c1y=0;
+	for(var i=0;i<cards.length;i++) {
+		if (cards[i].isDragging) { c1=cards[i].id; c1x=cards[i].x; c1y=cards[i].y; }
+		if (cards[i].isTarget) c2=cards[i].id;
+	}
+	//centertext("dragging card "+c1+" to card "+c2,600,880,"#666666");
+	if (c1!="" && c2!="") {
+		if (c2<c1) {
+			var tmp=c2;
+			c2=c1;
+			c1=tmp;
+		}
+		if (combos[c1][c2]) {
+				//var displaytext="???";
+			if (haspermaflag("combo-"+c1+"-"+c2)) {
+				displaytext=combos[c1][c2][1];
+				displaytext="You remember: \""+displaytext+"\"";
+				displaytext=displaytext.replace("BOX","container");
+				displaytext=displaytext.replace("NAME","thing");
+				messagex=c1x-50;
+				messagey=c1y+75;
+				if (messagex<200) messagex=200;
+				if (messagex>1000) messagex=1000;
+				if (messagey>800) messagey-=200;
+					ctx.globalAlpha=.5;
+					ctx.fillStyle='#333333';
+					bgheight=70;
+					if(displaytext.length>60) bgheight=95;
+					if(displaytext.length>100) bgheight=120;
+					if(displaytext.length<30) bgheight=45;
+					ctx.fillRect(messagex-220,messagey-30,440,bgheight);
+					ctx.globalAlpha=1;
+					ctx.fillStyle='#fae5d3';
+					ctx.font="20px sina";
+					wrapText(ctx,displaytext,messagex-200,messagey,400,24);
+
+				
+				
+				//ctx.fillStyle="#ffffff";
+				//ctx.fillRect(200,880,800,100);
+				//centertext("Memory: "+combos[c1][c2][1],601,890,"#000000",18);
+			}
+		}	
+	}
+}
+
+function setcurrentmessage(msg,x=600,y=500) {
+		currentmessage=msg;
+		if (x>1000) x-=200;
+		if (x<200) x+=200;
+		if (y>800) y-=250;
+		currentmessagex=x;
+		currentmessagey=y;
+		//currentmessagetime=150+msg.length;
+		currentmessagetime=3000; // make these last longer and a click dismisses them
+}
+
+function drawhp() {
+	xpos=30;
+	for(var i=0;i<maxhp;i++) {
+		if (i<hp) putimage("hp1",xpos,800);
+		else putimage("hp0",xpos,800);
+		xpos+=64;
+	}
+	xpos=30;
+	for(var i=0;i<maxsanity;i++) {
+		if (i<sanity) putimage("sanity1",xpos,736);
+		else putimage("sanity0",xpos,736);
+		xpos+=64;
+	}
+}
+
+function titlescreen() {
+	ctx.fillStyle="#000000";
+	ctx.fillRect(0,0,gamewidth,gameheight);
+	putimage("bg_mausoleum",0,0);
+	drawparticles();
+	if (roll(1,30)==1) adddust();
+	centertext("CATACOMBO",600,300,"#ffffff",100);
+	centertext("click to start",600,600);
+	putimage("fg_frame",0,0);
+	if (keysdown[32]) startgamephase();
+}
+
+function gameoverscreen() {
+	ctx.fillStyle="#000000";
+	ctx.fillRect(0,0,gamewidth,gameheight);
+	putimage("bg_stars",0,0);
+	centertext("GAME OVER",600,300,"#ffffff",100);
+	centertext("You did not save the realm, but your memories will serve you well in future attempts.",600,500);
+	centertext("Click to try again.",600,600);
+	putimage("fg_frame",0,0);
+	if (keysdown[32]) startgamephase();
+}
+
+function gamewinscreen() {
+	ctx.fillStyle="#000000";
+	ctx.fillRect(0,0,gamewidth,gameheight);
+	putimage("bg_stars",0,0);	
+	centertext("YOU WON",600,300,"#ffffff",100);
+	var outcome="You defeated the Dark Lord and saved the world, but his machines still operate, so life sucks for everybody.  This is the okay ending.";
+	if (hasflag("bell1") && hasflag("bell2")) outcome="You also destroyed the Dark Lord's machinery, so the world will prosper!  This is the good ending.";
+	centertext(outcome,600,400);
+	if (statuesize) centertext("You built a "+statuesize+"-foot golden statue, which people love.",600,500);
+	centertext("Click to play again",600,600);
+	putimage("fg_frame",0,0);
+	if (keysdown[32]) startgamephase();
+}
+
+function drawgame() {
+	if (screenshake) prescreenshake();
+	ctx.fillStyle="#000000";
+	ctx.fillRect(0,0,gamewidth,gameheight);
+	if (gamemode==1 || gamemode==5) putimage("bg_stars",0,0);
+	if (gamemode==1 || gamemode==5) if (frame%8==0) addstar("offscreen");
+	if (gamemode==2) putimage("bg_maps",0,0);
+	if (gamemode==3) putimage("bg_"+playerlocation,0,0);
+	if (gamemode==4) putimage("bg_town",0,0);
+	drawparticles();
+	drawcards();
+	tidycards(); // make cards move away from each other if they overlap
+	if (screenshake) postscreenshake();
+	tutorialtext();
+	putimage("fg_frame",0,0);
+	previewtext();
+	if (gamemode==3) drawhp();
+	displayevent();
+	if (currentmessagetime) drawcurrentmessage();
+}
+
+function combinecards(a,b) {
+	cards[a].processing=1;
+	cards[b].processing=1;
+	cards[a].desiredx=cards[b].x;
+	cards[a].desiredy=cards[b].y;
+	cards[a].desiredzoom=50;
+	cards[b].desiredzoom=50;
+	cards[a].desiredangle=90;
+	cards[b].desiredangle=90;
+	if (cards[a]["id"]<cards[b]["id"]) queue(400,"processcombination("+a+","+b+","+cards[b].x+","+cards[b].y+")");
+	else queue(400,"processcombination("+b+","+a+","+cards[a].x+","+cards[a].y+")");
+}
+
+function passtime() {
+		//console.log("checking for passage of time.");
+		var bluecards=0;
+		for(var i=0;i<cards.length;i++) if (cards[i].cardtype=="stat" && !cards[i].countdown) bluecards++;
+		//console.log("there are "+bluecards+" blue cards remaining.");
+		if (bluecards==0 && gamemode==3) queue(1000,"advancetime()");
+		if (bluecards==0 && gamemode==4) queue(1000,"doneintown()");
+}
+
+function advancetime() {
+	//setcurrentmessage("Time Passes.",600,400);
+	queue(100,"handleinjuries()");
+}
+
+function doneintown() {
+		if (refundedtreasure) {
+			refundedtreasure=0;
+			return;
+		}
+		setcurrentmessage("You are out of money.  Time for another quest.");
+		queue(1000,"startgamephase(1)");
+}
+
+function handleinjuries() {
+	var foundone=0;
+	for(var i=0;i<cards.length;i++) {
+		if (cards[i].id=="injury") {
+			foundone=1;
+			cards[i].processing=1;
+			cards[i].desiredzoom=300;
+			cards[i].countdown=20;
+			queuesound("dig",1);
+			if (!godmode) hp--;
+		}
+		if (cards[i].id=="horror") {
+			foundone=1;
+			cards[i].processing=1;
+			cards[i].desiredzoom=300;
+			cards[i].countdown=20;
+			queuesound("break",1);
+			if (!godmode) sanity--;
+		}
+	}
+	if (foundone) queue(1000,"");
+	queue (100,"checkgameover()");
+	queue(0,"timepassing=50;");
+}
+
+function checkgameover() { // polish: skip this delay if there are no monsters
+	if (hp<1) queue (1000,"startgamephase(5)");
+	else if (sanity<1) queue (1000,"startgamephase(5)");
+	else queue (500,"monstersact()");
+}
+
+function monstersact() {
+	for(var i=0;i<cards.length;i++) {
+		if (cards[i].damage>0) {
+			cards[i].angle=90;
+			var horrors=Math.floor(cards[i].damage/10);
+			var injuries=cards[i].damage%10;
+			for(var l=0;l<horrors;l++) dealcardfromto("horror",cards[i].x,cards[i].y,roll(900,1000),roll(500,700),1);
+			for(var l=0;l<injuries;l++) dealcardfromto("injury",cards[i].x,cards[i].y,roll(900,1000),roll(500,700),1);
+		}
+	}
+	queue(0,"dealplayercards()");
+}
+
+
+
+
+function processcombination(cardindex1,cardindex2,x,y) {
+		movesthislevel++; // how many combos have we done
+		var transitioning=0; // are we nuking all the cards?
+		var boxname="BOX"; // for replacing a container name
+		card1=cards[cardindex1];
+		card2=cards[cardindex2];
+		//console.log("processing "+card1["id"]+card2["id"]);
+		var flagname="combo-"+card1["id"]+"-"+card2["id"];
+		if (!haspermaflag(flagname)) addpermaflag(flagname);
+		var keepcard1=false; // we might end up keeping one card or another based on what happens
+		var keepcard2=false; //
+		// if a combo is defined (which it damned well should be)
+		if (card2["id"]=="soul" && card1["id"]=="debug") {
+				addflag("woods"); addflag("cave"); addflag("village");
+				addflag("dirtbag"); addflag("scholar"); addflag("sage"); addflag("soldier"); addflag("scoundrel");
+				startgamephase(1);
+				transitioning=1;
+		}
+		else if (card2["id"]=="soul") { // process class selection differently
+			playerclass=card1["label"];
+			playerclassid=card1["id"];
+			startgamephase(2);
+			transitioning=1;
+		} else if (card2["id"]=="travel" || card1["id"]=="travel") { // and level selection
+			// debug start level
+			if (card1["id"]=="travel") playerlocation=card2["id"]; else playerlocation=card1["id"];
+			transitioning=1;
+			startgamephase(3);
+		} else if (combos[card1["id"]][card2["id"]]) { // regular combos go in here
+				var sentence=combos[card1["id"]][card2["id"]][1];
+				var instructions=combos[card1["id"]][card2["id"]][0];
+				//display the results sentence
+				// message word replacements
+				var newname="nothing";
+				if (card1.id=='container' || card1.id=='container_locked' || card1.id=='approach' || card1.id=='statue') var newname=card1.label;
+				if (card2.id=='container' || card2.id=='container_locked' || card2.id=='approach' || card2.id=='statue') var newname=card2.label;
+				sentence=sentence.replace("BOX",newname.toLowerCase());
+				sentence=sentence.replace("NAME",newname.toLowerCase());
+				
+				setcurrentmessage(sentence,card1.x+50,card1.y+200)
+
+				//process the instructions
+				steps=instructions.split(',');
+				var offset=0;
+				var exiting=0;
+				for(var i=0;i<steps.length;i++) {
+						bits=Array();
+						bits = steps[i].split(/\(|\)|,/).filter(Boolean)
+						//console.log(bits);
+
+						if (bits[0]=="create") { // if we are making a new card
+							//console.log("processing a create");
+							//var newcard=carddata[bits[1]];
+							if (carddata[bits[1]]) newcard = Object.create(Object.getPrototypeOf(carddata[bits[1]]), Object.getOwnPropertyDescriptors(carddata[bits[1]]));
+							else {
+								newcard = Object.create(Object.getPrototypeOf(carddata['missing']), Object.getOwnPropertyDescriptors(carddata['missing']));
+								newcard.label="Missing "+bits[1];
+							}
+							newcard.adjectives=[];
+							newcard.x=card2.x+offset;
+							newcard.y=card2.y+offset;
+							newcard.desiredx=newcard.x;
+							newcard.desiredy=newcard.y;
+							queuesound(cardsound(bits[1]),1);
+							cards.push(newcard);
+							offset+=50;
+						}
+						if (bits[0]=="adj2") {
+							keepcard2=true;
+							//cards[cardindex2].label=carddata[card2["id"]].label+" ("+bits[1]+")";
+							//cards[cardindex2].adjectives.push(bits[1]);
+							queuesound("whiff",1);
+							card2.adjectives.push(bits[1]);
+							normalizecard(cardindex2)
+						}
+						if (bits[0]=="adj") {
+							keepcard1=true;
+							//cards[cardindex1].label=carddata[card1["id"]].label+" ("+bits[1]+")";
+							//cards[cardindex1].adjectives.push(bits[1]);
+							queuesound("whiff",1);
+							card1.adjectives.push(bits[1]);
+							normalizecard(cardindex1)
+						}
+						if (bits[0]=="defeat") { // defeat a monster
+							// which one is the monster
+							if (card1.cardtype=='dungeon') var monster=card1;
+							else var monster=card2;
+							monsterdrops(monster.id);
+							//console.log("defeated monster "+monster.id);
+						}
+						if (bits[0]=="injury") { // injure player
+							//dealcard("injury","hazard");
+							dealcardfromto("injury",card2.x,card2.y,roll(900,1000),roll(500,700),1);
+						}
+						if (bits[0]=="horror") { //horrify player
+							dealcardfromto("horror",card2.x,card2.y,roll(900,1000),roll(500,700),1);
+						}
+						if (bits[0]=="unhandled") { // if I missed something, err on the side of not consuming the cards
+							// this should not happen in shipping data
+							keepcard1=true;
+							keepcard2=true;
+						}
+						if (bits[0]=="statue") {
+							refundedtreasure=0;
+							keepcard2=true;
+							statuesize+=parseInt(bits[1]);
+							queuesound("treasure",1);
+							cards[cardindex2].label=statuesize+"-foot Gold Statue";
+						}
+						if (bits[0]=="open") {
+							if (card1.cardtype=='dungeon') var box=card1;
+							else var box=card2;
+							if (box.contents) { queuesound(cardsound(box.contents),1); dealcard(box.contents,"atmouse"); }
+							if (box.contents2) { queuesound(cardsound(box.contents2),1); dealcard(box.contents2,"atmouse"); }
+							if (box.contents3) { queuesound(cardsound(box.contents3),1); dealcard(box.contents3,"atmouse"); }
+						}
+						if (bits[0]=="enter") { // entering a new branch
+							if (card1.cardtype=='dungeon') var door=card1;
+							else var door=card2;
+							if (dungeon["branch"+door.contents]) {
+								for(var g=0;g<dungeon["branch"+door.contents].length;g++) {
+									var newcard=dungeon["branch"+door.contents][g];
+									newcard.x=door.x+roll(-50,50);
+									newcard.y=door.y+roll(-50,50);
+									newcard.desiredx=newcard.x;
+									newcard.desiredy=newcard.y;
+									queuesound(cardsound(newcard.id),1);
+									cards.push(newcard);
+								}
+							}
+						}
+						if (bits[0]=="bell") {
+							if (card1.cardtype=='dungeon') var bell=card1; else var bell=card2;
+							if (bell.contents==1) queue(1000,"currentevent=61");
+							else queue(1000,"currentevent=62");
+						}
+						if (bits[0]=="event") {
+							queue (1000,"currentevent="+bits[1]);
+						}
+						if (bits[0]=="exit") {
+								exiting=1;
+						}
+						if (bits[0]=="keep1") keepcard1=true;
+						if (bits[0]=="keep2") keepcard2=true;
+				}
+		} else {
+				setcurrentmessage("UNHANDLED COMBO",card1.x+50,card1.y+200)
+
+				keepcard1=true;
+				keepcard2=true;
+				normalizecard(cardindex1);
+				normalizecard(cardindex2);
+		}
+		if (exiting) {
+			treasure=0;
+			for(var i=0;i<cards.length;i++) if (cards[i].id=="treasure") treasure++;
+			//DEBUG:
+			//treasure=3;
+			if (runprogress>13) {
+					changemusicspeed(1,5000);
+					gamemode=9; // game end
+			} else queue (1000,"startgamephase(4)");
+		}
+		if (!transitioning) {
+			if (!keepcard1) cards[cardindex1].countdown=20; else normalizecard(cardindex1);
+			if (!keepcard2) cards[cardindex2].countdown=20; else normalizecard(cardindex2);
+		}
+		if (!exiting) passtime();
+
+}
+
+function normalizecard(cardindex) {
+		cards[cardindex].desiredzoom=100;
+		cards[cardindex].desiredangle=0;
+		cards[cardindex].processing=0;
+}
+
+function dealcardfromto(cardid,startx,starty,tox=0,toy=0,noclip=0) {
+	newcard = Object.create(Object.getPrototypeOf(carddata[cardid]), Object.getOwnPropertyDescriptors(carddata[cardid]));
+	newcard.adjectives=[];
+	newcard.x=startx;
+	newcard.y=starty;
+	if (tox>0) newcard.desiredx=tox; else newcard.desiredx=newcard.x;
+	if (toy>0) newcard.desiredy=toy; else newcard.desiredy=newcard.y;
+		if (noclip) newcard.noclip=100;
+	cards.push(newcard);
+	return cards.length-1;
+}
+
+function dealcard(cardid,position,label="existing") {
+	//newcard=carddata[cardid];
+	if (!carddata[cardid]) {
+		console.log("TRIED TO DEAL CARD "+cardid+" AND FAILED");
+		return
+	}
+	newcard = Object.create(Object.getPrototypeOf(carddata[cardid]), Object.getOwnPropertyDescriptors(carddata[cardid]));
+	newcard.adjectives=[];
+	if (label!="existing") newcard.label=label;
+	newcard.x=100;
+	newcard.y=100;
+	var motion=0;
+	switch(position) {
+		case "dungeon":
+			if (dungeoncardposition<50) dungeoncardposition=50;
+			newcard.x=dungeoncardposition;
+			newcard.y=roll(150,450);
+			dungeoncardposition+=roll(110,130);
+			break;
+		case "abovestat":
+			newcard.x=abovestatcardposition;
+			abovestatcardposition+=120;
+			newcard.y=500;
+			break;
+		case "stat":
+			motion=1;
+			newcard.x=statcardposition;
+			newcard.y=720;
+			newcard.desiredx=newcard.x;
+			newcard.desiredy=roll(680,720);
+			statcardposition+=roll(110,130);
+			break;
+		case "bottom":
+			newcard.x=roll(300,900);
+			newcard.y=roll(550,750);
+			break;
+		case "bottomright":
+			newcard.x=roll(600,1000);
+			newcard.y=roll(550,750);
+			break;
+		case "top":
+			newcard.x=roll(300,900);
+			newcard.y=roll(75,450);
+			break;
+		case "topright":
+			newcard.x=roll(600,1000);
+			newcard.y=roll(75,450);
+			break;
+		case "hazard":
+			motion=1;
+			newcard.x=lastmousex-50;
+			newcard.y=lastmousey-75;
+			newcard.desiredx=roll(900,1100);
+			newcard.desiredy=roll(500,750);
+			break;
+		case "belowmouse":
+			motion=1;
+			newcard.x=lastmousex-50;
+			newcard.y=lastmousey-75;
+			newcard.desiredx=newcard.x+roll(-50,50);
+			newcard.desiredy=50+newcard.y+roll(0,50);
+			break;
+		case "atmouse":
+			newcard.x=lastmousex-50;
+			newcard.y=lastmousey-100;
+			break;
+	}
+	if (motion==0) {
+		newcard.desiredx=newcard.x;
+		newcard.desiredy=newcard.y;
+	}
+	cards.push(newcard);
+	return cards.length-1;
+}
+
+function drawcards() {
+	var dragee=-999; // frickin' 0 index
+	for (i=cards.length-1;i>=0;i--) {	// draw cards
+		cards[i].arrayid=i;
+		cards[i].tick();
+		cards[i].draw();
+		if (cards[i].isDragging) dragee=i;
+		if (cards[i].destroyed) {
+			cards.splice(i,1);
+		}
+	}
+	// redraw the one we're currently dragging on top
+	if (dragee>=0) if (cards[dragee]) cards[dragee].draw();
+}
+
+class Card {
+	constructor(id,icon,label,cardtype,qualitytier=1) {
+			this.id=id;
+			this.x=100;
+			this.y=100;
+			this.tier=qualitytier;
+			this.desiredx=this.x;
+			this.desiredy=this.y;
+			this.icon=icon;
+			this.width=100;
+			this.height=150;
+			this.isDragging=false;
+			this.offsetX=0;
+			this.offsetY=0;
+			this.angle=0;
+			this.desiredangle=0;
+			this.zoom=100;
+			this.desiredzoom=100;
+			this.label=label;
+			this.isTarget=false;
+			this.processing=0;
+			this.arrayid=0;
+			this.alpha=1;
+			this.countdown=0;
+			this.cardtype=cardtype;
+			this.back=roll(1,2);
+			this.damage=0;
+			this.noclip=0;
+			this.adjectives=[];
+	}
+	tick() {
+		if (this.noclip) this.noclip--; // period of non-tidiness for cards to shoot into spots
+		if (this.countdown) this.countdown--;
+		if (this.countdown==1) this.destroyed=1;
+		if (this.alpha<1) this.alpha+=.03;
+		if (this.alpha>1) this.alpha=1;
+		if (this.countdown) this.alpha=this.countdown*.05;
+		if (this.isDragging) {
+			this.desiredzoom=120;
+			this.desiredangle=-10;
+		} else if (!this.processing) {
+			this.desiredzoom=100;
+			this.desiredangle=0;
+		}
+		if (this.isTarget && !draggingCard) this.isTarget=0;
+		if (this.isTarget) {
+			this.desiredzoom=120;
+			this.angle=(5*Math.sin(Date.now()/120));
+			this.desiredangle=this.angle;
+		}
+		this.zoom=closertotarget(this.zoom,this.desiredzoom,2);
+		this.angle=closertotarget(this.angle,this.desiredangle,3);
+		if (this.isDragging) return; // don't fight the player if they're moving it
+			this.desiredx=Math.floor(this.desiredx);
+			this.desiredy=Math.floor(this.desiredy);
+		if (!this.noclip) { // cards can be off-screen for cosmetic reasons if they're noclip
+			if (this.desiredx<20) this.desiredx=20;
+			if (this.desiredy<25) this.desiredy=25;
+			if (this.desiredx>gamewidth-(20+this.width)) this.desiredx=gamewidth-(20+this.width);
+			if (this.desiredy>gameheight-(25+this.height)) this.desiredy=gameheight-(25+this.height);
+		}
+		this.x=closertotargetease(this.x,this.desiredx,99,10,3);
+		this.y=closertotargetease(this.y,this.desiredy,99,10,3);
+	}
+	draw() {
+    ctx.save();
+    ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+    ctx.rotate((this.angle * Math.PI) / 180);
+    ctx.globalAlpha=this.alpha;
+    if (this.zoom!=100) ctx.scale(this.zoom/100,this.zoom/100);
+    //ctx.fillStyle = this.color;
+    //ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
+
+    if (this.id=="injury" || this.id=="horror") putimage("cardback_red",-this.width/2,-this.height/2);
+    else if (this.cardtype=="stat") putimage("cardback_blue",-this.width/2,-this.height/2);
+    else if (this.cardtype=="player" || this.cardtype=='object' || this.cardtype=="place" || this.cardtype=="class") putimage("card",-this.width/2,-this.height/2);
+    else putimage("dungeoncard",-this.width/2,-this.height/2);
+
+    puticon(this.icon,-40,-65);
+    
+    //quality stars
+    if (this.tier==2) putstar(34,-68);
+    if (this.tier==3) { putstar(30,-68); putstar(34,-64); }
+    if (this.tier==4) { putstar(30,-68); putstar(34,-64); putstar(26,-64);}
+    if (this.tier==5) { putstar(26,-68); putstar(34,-68); putstar(34,-62); putstar(26,-62);}
+    if (this.tier==5) { putstar(26,-68); putstar(34,-68); putstar(34,-62); putstar(26,-62); putstar(30,65); }
+    
+    // damage icons
+    if (carddata[this.id].damage) {
+    		var iconsize=16+(2*Math.sin(frame/15));
+    		var inj=carddata[this.id].damage % 10;
+    		var san=Math.floor(carddata[this.id].damage/10);
+    		if (inj) ctx.drawImage(document.getElementById("injurysword"),35-(iconsize/2),10-(iconsize/2),iconsize,iconsize);
+    		if (san) ctx.drawImage(document.getElementById("horrorface"),-35-(iconsize/2),10-(iconsize/2),iconsize,iconsize);
+    		
+    }
+    //fitcentertext(this.label,0,65,90);
+		//if (this.noclip) fitcentertext("noclip",0,30);
+    var words=this.label.split(' ');
+    if (words.length<4) if (this.adjectives.length) words.unshift(capitalize(this.adjectives[this.adjectives.length-1]));
+    if (words.length<4) if (this.adjectives.length>1) words.unshift(capitalize(this.adjectives[this.adjectives.length-2]));
+    if (words.length<4) if (this.adjectives.length>2) words.unshift(capitalize(this.adjectives[this.adjectives.length-3]));
+    if (words.length==1) fitcentertext(words[0],0,45,90);
+    if (words.length==2) {
+    	fitcentertext(words[0],0,45,90);
+    	fitcentertext(words[1],0,65,90);
+    }
+    if (words.length==3) {
+    	fitcentertext(words[0],0,29,90);
+    	fitcentertext(words[1],0,49,90);
+    	fitcentertext(words[2],0,69,90);
+    }
+    if (words.length==4) {
+    	fitcentertext(words[0],0,25,60,15);
+    	fitcentertext(words[1],0,40,60,15);
+    	fitcentertext(words[2],0,55,60,15);
+    	fitcentertext(words[3],0,70,60,15);
+    }
+    if (words.length>4) fitcentertext("Too Long Name!",0,65,90,this.tier);
+    //puttext(this.x+","+this.y,-40,-55,"white",10);
+    //puttext(this.desiredx+","+this.desiredy,-40,-35,"white",10);
+    //puttext(this.zoom+","+this.desiredzoom,-40,-25,"white",10);
+    ctx.restore();
+  }
+  isClicked(mouseX, mouseY) {
+    return (
+      mouseX >= this.x &&
+      mouseX <= this.x + this.width &&
+      mouseY >= this.y &&
+      mouseY <= this.y + this.height
+    );
+  }
+    startDrag(mouseX, mouseY) {
+    this.isDragging = true;
+    this.offsetX = mouseX - this.x;
+    this.offsetY = mouseY - this.y;
+  }
+
+  drag(mouseX, mouseY, canvas) {
+    if (this.isDragging) {
+      if (
+        mouseX > 0 &&
+        mouseX < gamewidth &&
+        mouseY > 0 &&
+        mouseY < gameheight
+      ) {
+        this.x = mouseX - this.offsetX;
+        this.y = mouseY - this.offsetY;
+	  		this.desiredx=this.x;
+		  	this.desiredy=this.y;
+      } else {
+        this.stopDrag();
+      }
+      // detect card we're targeting
+      var c=25;
+      var gotone=0;
+      for (var i=cards.length-1;i>=0;i--) {
+      	if (gotone==0 && !cards[i].isDragging && rectcollide(this.x+c,this.y+c,this.width-(2*c),this.height-(2*c),cards[i].x,cards[i].y,cards[i].width,cards[i].height)) {
+      		cards[i].isTarget=1;
+      		gotone=1;
+      	} else {
+      		cards[i].isTarget=0;
+      	}
+      }
+    }
+  }
+
+  stopDrag() {
+  	for (var i=cards.length-1;i>=0;i--) {
+  		if (cards[i].isTarget && cards[i].arrayid!=this.arrayid) {
+  			combinecards(this.arrayid,i);
+  		}
+  	}
+    this.isDragging = false;
+  }
+}
+
+function tidycards() {
+	overlap=5;
+	spacer=5;
+	spacer2=10;
+	for (i=cards.length-1;i>=0;i--) {
+		for (j=cards.length-1;j>=0;j--) {
+			if (i!=j) { // you can't escape yourself
+				if (!cards[i].isDragging && !cards[j].isDragging && !cards[i].processing && !cards[j].processing && !cards[i].noclip && !cards[j].noclip) { // don't mess with ones we're messing with or noclip cards
+					a=cards[i];
+					b=cards[j];
+					if (rectcollide(a.x-spacer,a.y-spacer,a.width+spacer2,a.height+spacer2,b.x,b.y,b.width,b.height) || (a.x==b.x && a.y==b.y)) {
+						dx=b.x-a.x;
+						dy=b.y-a.y;
+						dist=Math.hypot(dx,dy) || 1
+						if (a.x==b.x && a.y==b.y) cards[j].x+=roll(-5,5);
+						//if (cards[i].desiredx==cards[i].x && cards[j].desiredy==cards[j].y) { // if we're not already moving somewhere (this does not currently work)
+							cards[i].desiredx=cards[i].x-(dx/dist)*(overlap/2)
+							cards[i].desiredy=cards[i].y-(dy/dist)*(overlap/2)
+							cards[j].desiredx=cards[j].x+(dx/dist)*(overlap/2)
+							cards[j].desiredy=cards[j].y+(dy/dist)*(overlap/2)
+						//}
+					}
+				}
+			}
+		}
+	}
+}
+
+function queue(delay,command) {
+	thequeue.push([delay,command]);
+}
+
+function processqueue() {
+		// either tick down the 0th element of the queue or, if it's at zero, execute it and remove it from the queue
+		if (thequeue.length) {
+				var firstitemdelay=thequeue[0][0];
+				//console.log ('delay on first item is '+firstitemdelay);
+				if (firstitemdelay<1) {
+						//console.log('running queued command '+thequeue[0][1]);
+						var thiscommand=thequeue.shift();
+						eval(thiscommand[1]);
+
+				} else {
+						if (currentevent==0) thequeue[0][0]-=10; // we're doing 100 frames per second, so to make 1000 = 1000ms, we tick down by ten per
+				}
+		}
+}
+
+
+function putimage(imagename,x,y) {
+if (document.getElementById(imagename)) {
+	var image=document.getElementById(imagename);
+	ctx.drawImage(image,x,y,image.width,image.height);
+} else console.log("missing image: "+imagename);
+}
+
+function puticon(imagename,x,y) {
+if (document.getElementById(imagename)) {
+var image=document.getElementById(imagename);
+	ctx.drawImage(image,x,y,80,80);
+} else console.log("missing image: "+imagename);
+}
+
+function putstar(x,y) {
+	var image=document.getElementById("qualitystar");
+	ctx.drawImage(image,x,y,10,10);
+}
+
+function puttext(string,x,y,color="#ffffff",size=30) {
+	ctx.font = size+"px sina";
+	ctx.fillStyle=color;
+	ctx.fillText(string,x,y);
+}
+
+function centertext(string,x,y,color="regular",size=20) {
+	ctx.font = size+"px sina";
+	var leno=ctx.measureText(string).width;
+	x-=Math.floor(leno/2);
+	ctx.fillStyle=color;
+	ctx.fillText(string,x,y);
+}
+
+function tiercolor(tier) {
+	switch(tier) {
+			case 1: return "#333333";
+			case 2: return "#000000";
+			case 3: return "#1eff00";
+			case 4: return "#0070dd";
+			case 5: return "#a335ee";
+			case 6: return "#ff8000";
+	}
+}
+
+function fitcentertext(string,x,y,width,maxsize=25) {
+	//color=tiercolor(tier) // don't do this until you can figure out how to make it look decent, and maybe don't even do it then
+	color="#000000";
+	size=maxsize;
+	ctx.font=size+"px sina";
+	while (ctx.measureText(string).width>width && size>10) {
+		size--;
+		ctx.font=size+"px sina";
+	}
+	leno=ctx.measureText(string).width
+	ctx.fillStyle="#000000";
+	//if (tier>2) for(var i=-2;i<3;i++) for (var j=-2;j<3;j++) ctx.fillText(string,x-Math.floor(leno/2)+i,y+j);
+	ctx.fillStyle=color;
+	ctx.fillText(string,x-Math.floor(leno/2),y);
+}
+
+function closertozero(x,increment=1) {
+	if (x==0) return 0;
+	if (x>0 && x<increment) return 0;
+	if (x<0 && x>-increment) return 0;
+	if (x<0) return x+increment; else return x-increment;
+}
+
+function closertotarget(x,target,increment=1) {
+	if (x==target) return target;
+	if (x>target && x-target<increment) return target;
+	if (x<target && target-x<increment) return target;
+	if (x<target) return x+increment; else return x-increment;
+}
+
+function closertotargetease(x,target,easepercent,maximum,minimum=1) {
+		if (easepercent<1) easepercent=1;
+		if (easepercent>100) easepercent=99;
+		diff=Math.abs(x-target);
+		chunk=(diff*easepercent/100);
+		if (diff<minimum) return target; // we got there
+		if (chunk>maximum) chunk=maximum;
+		if (chunk<minimum) chunk=minimum;
+		if (x<target) return x+chunk;
+		else return x-chunk;
+}
+
+
+function constrain(x,xlimit) {	// constrain a value to between +/- a limit
+	if (x>xlimit) return xlimit;
+	if (x<-xlimit) return -xlimit;
+	return x;
+}
+
+function constrainrange(x,low,high) {
+	if (x>high) return high;
+	if (x<low) return low;
+	return x;
+}
+
+function prescreenshake() {
+	screenshake--;
+  	ctx.save();
+	ctx.translate(roll(-15,15), roll(-15,15));
+}
+
+function postscreenshake() {
+	ctx.restore();
+}
+
+function addflag(flagname) {
+	flags.push(flagname);
+}
+
+function hasflag(flagname) {
+	for (wi=0;wi<flags.length;wi++) {
+		if (flags[wi]==flagname) return true;
+	}
+	return false;
+}
+
+function addpermaflag(flagname) {
+	permaflags.push(flagname);
+	localStorage.permaflags=JSON.stringify(permaflags);
+}
+
+function haspermaflag(flagname) {
+	for (wi=0;wi<permaflags.length;wi++) {
+		if (permaflags[wi]==flagname) return true;
+	}
+	return false;
+}
+
+function rgbstring(red,green,blue) { // make a color code out of three numbers from 0-255
+	red=red.toString(16);
+	if (red.length<2) red="0"+red;
+	green=green.toString(16);
+	if (green.length<2) green="0"+green;
+	blue=blue.toString(16);
+	if (blue.length<2) blue="0"+blue;
+	return "#"+red+green+blue;
+}
+
+function capitalize(strobo) {
+  return strobo.charAt(0).toUpperCase() + strobo.slice(1)
+}
+
+function isword(word) { // this requires the inclusion of dictionary.js
+	word=word.toUpperCase();
+	for (wi=0;wi<words.length;wi++) {
+		if (words[wi]==word) return true;
+	}
+	return false;
+}
+
+function scramble(word) {
+	lets=Array();
+	for (pos=0;pos<word.length;pos++) lets.push(word[pos]);
+	lets=shuffle(lets);
+	ret="";
+	for (pos=0;pos<lets.length;pos++) ret+=lets[pos];
+	return ret;
+}
+
+function anagrams(word1,word2) {	// are two words anagrams of each other?
+	l1=Array(); l2=Array();
+	for(gi=0;gi<word1.length;gi++)  l1.push(word1[gi]);
+	for(gi=0;gi<word2.length;gi++)  l2.push(word2[gi]);
+	if (JSON.stringify(l1.sort())==JSON.stringify(l2.sort())) return true; 		// why is this so weird and hard?
+	return false;
+}
+
+function subset(arr,num) { // return a random subset of [num] elements in array [arr]
+	arr=shuffle(arr);
+	return arr.slice(0,num);
+}
+
+function rectcollide(x1,y1,width1,height1,x2,y2,width2,height2) {
+	if (x1<x2+width2 && x1+width1>x2 && y1<y2+height2 && y1+height1>y2) return true;
+	return false;
+}
+
+function distance(x1,y1,x2,y2) {
+	return Math.sqrt((x1-x2)*(x1-x2)+(y1-y2)*(y1-y2));
+}
+
+function addstar(where="screen") {
+	var x=roll(50,1150);
+	if (where=="offscreen") x=1200;
+	particles.push(new Particle(x,roll(50,850),3,3,pickone(Array("#999999","#9999cc","#cc9999")),0,0,3000,1,2));
+}
+
+function adddust() {
+	particles.push(new Particle(roll(50,1150),0,3,3,"#999999",0,0,500,1,3));
+}
+
+class Particle {
+	constructor(x,y,width,height,color,dx,dy,lifespan=30,alpha=1,category=1) {
+		this.x=x;
+		this.y=y;
+		this.width=width;
+		this.height=height;
+		this.color=color;
+		this.dx=dx;
+		this.dy=dy;
+		this.alpha=alpha;
+		this.lifespan=lifespan;
+		this.category=category;
+		this.accel=0;
+		if (category==2) { // stars
+			this.width=roll(3,5);
+			this.height=this.width;
+			this.dx=-(6-this.width);
+		}
+		if (category==3) { // dust
+			this.accel=.5;
+		}
+	}
+	draw() {
+		this.x+=this.dx;
+		this.y+=this.dy;
+		this.dy+=this.accel;
+		if (this.dy>10) this.dy=10;
+		this.lifespan--;
+		if (this.alpha>this.lifespan/10) this.alpha=this.lifespan/10;
+		if (this.lifespan<1) this.destroyed=true;
+		ctx.fillStyle=this.color;
+		ctx.strokeStyle=this.color;
+		ctx.globalAlpha=this.alpha;
+		//ctx.fillRect(this.x-(this.width/2),this.y-(this.height/2),this.width,this.height);
+		ctx.beginPath();
+		ctx.arc(this.x,this.y,this.width/2,0,2*Math.PI);
+		ctx.fill();
+		ctx.globalAlpha=1;
+	}
+}
+
+function drawparticles() {
+	for (i=particles.length-1;i>=0;i--) {	// draw particles
+		particles[i].draw();
+		if (particles[i].destroyed) {
+			particles.splice(i,1);
+		}
+	}
+}
+
+function particleburst(x,y,num=20,color="#ffffff",lowsize=3,highsize=5,lifespan=30,alpha=1) {
+	for(var i=0;i<num;i++) {
+		particles.push(new Particle(x,y,roll(lowsize,highsize),roll(lowsize,highsize),color,roll(-10,10)/10,roll(-10,10)/10,lifespan,alpha));
+	}
+}
+
+// CDMoyer's code.  Thanks CDMoyer! --------------------------
+function bucket (str) {
+	if (!buckets[str]) return '%'+str+'%';
+	else return pickone(buckets[str]);
+}
+
+function madlib(str) {
+	str = str.replace(/\%[^%]*\%/g, function (str) {
+		str = str.replace(/\%/g, '');
+		var res = bucket(str);
+		if (res != '%'+str+'%') return madlib(res);
+		else return res;
+	});
+	return str;
+}
+
+function roll(low, high) {
+	return low + Math.floor(Math.random()*(high-low+1))
+}
+
+function pickone(ar) {
+	return ar[roll(0, ar.length-1)];
+}
+// end CDMoyer's code. ---------------------------------------
+
+/**
+ * Randomly shuffle an array
+ * https://stackoverflow.com/a/2450976/1293256
+ * @param  {Array} array The array to shuffle
+ * @return {String}      The first item in the shuffled array
+ */
+function shuffle (array) {
+	var currentIndex = array.length;
+	var temporaryValue, randomIndex;
+	// While there remain elements to shuffle...
+	while (0 !== currentIndex) {
+		// Pick a remaining element...
+		randomIndex = Math.floor(Math.random() * currentIndex);
+		currentIndex -= 1;
+		// And swap it with the current element.
+		temporaryValue = array[currentIndex];
+		array[currentIndex] = array[randomIndex];
+		array[randomIndex] = temporaryValue;
+	}
+	return array;
+};
+
+function collapsearray(ar) {
+	var bar=ar.filter(val=>val); // collapse it down and reorder it correctly
+	return bar;
+}
+
+// sound code mostly copied from Broughlike tutorial at https://nluqo.github.io/broughlike-tutorial/
+function playsound(soundName,vol=.5){
+    sounds[soundName].preservesPitch = false;  // For Chrome & modern browsers
+    sounds[soundName].mozPreservesPitch = false; // For Firefox
+    sounds[soundName].webkitPreservesPitch = false; // For older Safari
+
+    var newpitch=1;
+    switch(soundName) {
+    		case "whiff": newpitch=roll(8,12)/10;  break;
+    		case "click": newpitch=roll(8,12)/10;  break;
+    		case "dig": newpitch=roll(7,13)/10; break;
+    		case "break": newpitch=roll(7,13)/10; break;
+    }
+    var soundcopy=sounds[soundName];
+    soundcopy.playbackRate=newpitch;
+    soundcopy.currentTime = 0;
+    soundcopy.volume=vol;
+    soundcopy.play();
+}
+
+function queuesound(soundname,vol=.5) {
+	soundsthisframe++;
+	//console.log('queueing '+soundname+' with soundsthisframe '+soundsthisframe);
+	if (soundsthisframe==1) playsound(soundname,vol);
+	else setTimeout("playsound('"+soundname+"',"+vol+")",((soundsthisframe-1)*150)+roll(-50,50));
+}
+
+function cardsound(cardid) {
+	switch(cardid) {
+		case "treasure": return "treasure"; break;
+	}
+	return "click";
+}
+
+function startsound() {
+	soundstarted=true;
+	loop1 = new Audio("./allegro.mp3");
+ 	loop1.loop = true;
+ 	loop1.volume=1;
+ 	loop1.play();
+
+	sounds = {
+	 	//id: new Audio("./file.wav"),
+	 	whiff: new Audio("./whiff2.wav"),
+	 	dig: new Audio("./dig.wav"),
+	 	break: new Audio("./break.wav"),
+	 	treasure: new Audio("./getmoney.wav"),
+	 	click: new Audio("./click.wav"),
+	};
+}
+// end Broughlike tutorial sound code
+
+// code by robots from the future
+function changemusicspeed(targetSpeed, duration = 1000) {
+    if (!loop1) return; // Ensure the audio object exists
+
+    loop1.preservesPitch = false;  // For Chrome & modern browsers
+    loop1.mozPreservesPitch = false; // For Firefox
+    loop1.webkitPreservesPitch = false; // For older Safari
+
+    let startSpeed = loop1.playbackRate;
+    let startTime = performance.now();
+
+    function updateSpeed(currentTime) {
+        let elapsed = currentTime - startTime;
+        let progress = Math.min(elapsed / duration, 1);
+        loop1.playbackRate = startSpeed + (targetSpeed - startSpeed) * progress;
+
+        if (progress < 1) {
+            requestAnimationFrame(updateSpeed);
+        }
+    }
+
+    requestAnimationFrame(updateSpeed);
+}
+// end future robot code
+
+// from https://www.html5canvastutorials.com/tutorials/html5-canvas-wrap-text-tutorial/
+      function wrapText(context, text, x, y, maxWidth, lineHeight) {
+		if (text.charAt(0)=="+") text=text.slice(1);
+		if (text.charAt(0)=="-") text=text.slice(1);
+		if (text.charAt(0)=="=") text=text.slice(1);
+		if (text.charAt(0)=="*") text=text.slice(1);
+		if (text.charAt(0)=="$") text=text.slice(1);
+        var words = text.split(' ');
+        var line = '';
+
+        for(var n = 0; n < words.length; n++) {
+          var testLine = line + words[n] + ' ';
+          var metrics = context.measureText(testLine);
+          var testWidth = metrics.width;
+          if (testWidth > maxWidth && n > 0) {
+            context.fillText(line, x, y);
+            line = words[n] + ' ';
+            y += lineHeight;
+          }
+          else {
+            line = testLine;
+          }
+        }
+        context.fillText(line, x, y);
+      }
+// end wrap text
+
+// keydown handling, set keysdown[] to array and zero out whatever keys you want to watch.
+    document.onkeydown = presskey;
+
+    function presskey(e) {
+	//console.log(e.keyCode);
+      e = e || window.event;
+		code=e.keyCode;
+		e.preventDefault();
+	if (typeof keysdown[code] !== 'undefined') keysdown[code]=1;
+
+    }
+
+    document.onkeyup = releasekey;
+
+    function releasekey(e) {
+      e = e || window.event;
+		code=e.keyCode;
+		if (typeof keysdown[code] !== 'undefined') keysdown[code]=0;
+    }
+
+
+
+</script>
+<script src=cards.js?v=3></script>
+<script src=combos.js?v=6></script>
+<script src=dungeoncombos.js?v=4></script>
+<script src=levelgen.js?v=5></script>
+<script src=characters.js?v=3></script>
+<script src=tutorial.js?v=3></script>
+<script src=monsters.js?v=3></script>
+<script src=events.js?v=3></script>
+
+</head>
+
+<body onLoad='init();'>
+<div style='width:100vw; height:100vh; display:flex; align-items:center; justify-content:center;'>
+<canvas id="c" width="1200" height="900" style='border: 1px solid black; max-width:100vw; max-height:100vh; width:auto; height:auto; object-fit:contain;'></canvas>
+</div>
+
+<div style='visibility: hidden; display: none;'>
+<!-- images go here -->
+<img id=xxx src="./icons/xxx.png">
+<img id=hp0 src="./hp0.png">
+<img id=hp1 src="./hp1.png">
+<img id=sanity0 src="./sanity0.png">
+<img id=sanity1 src="./sanity1.png">
+<img id=card src="./card.png">
+<img id=qualitystar src="./qualitystar.png">
+<img id=cardback_blue src="./cardback_blue.png">
+<img id=cardback_red src="./cardback_red.png">
+<img id=dungeoncard src="./dungeoncard.png">
+<img id=injurysword src="./injurysword.png">
+<img id=horrorface src="./horrorface.png">
+<img id=fg_frame src="./fg_frame.png">
+<img id=bg_clock src="./bg_clock.png">
+
+<img id=bg_stars src="./bg_stars.png">
+<img id=bg_town src="./bg_town.png">
+
+<img id=bg_woods src="./bg_woods.png">
+<img id=bg_graves src="./bg_graves.png">
+<img id=bg_maps src="./bg_maps.png">
+<img id=bg_village src="./bg_village.png">
+<img id=bg_cave src="./bg_cave.png">
+
+<img id=bg_barrow src="./bg_barrow.png">
+<img id=bg_banditcamp src="./bg_banditcamp.png">
+<img id=bg_darkforest src="./bg_darkforest.png">
+<img id=bg_mausoleum src="./bg_mausoleum.png">
+<img id=bg_catacomb src="./bg_catacomb.png">
+<img id=bg_dungeon src="./bg_dungeon.png">
+
+<img id=bg_battlefield src="./bg_battlefield.png">
+<img id=bg_taintedforest src="./bg_taintedforest.png">
+<img id=bg_orcfortress src="./bg_orcfortress.png">
+<img id=bg_necropolis src="./bg_necropolis.png">
+
+<img id=bg_darkcitadel src="./bg_darkcitadel.png">
+
+
+
+
+
+<!--<img id= src="./.png">-->
+
+
+
+
+<img id=crypt-entrance src="./icons/crypt-entrance.png">
+<img id=glowing-artifact src="./icons/glowing-artifact.png">
+<img id=barbarian src="./icons/barbarian.png">
+<img id=palisade src="./icons/palisade.png">
+<img id=tumulus src="./icons/tumulus.png">
+<img id=castle-ruins src="./icons/castle-ruins.png">
+<img id=carillon src="./icons/carillon.png">
+<img id=boar src="./icons/boar.png">
+<img id=beer-bottle src="./icons/beer-bottle.png">
+<img id=wolf-howl src="./icons/wolf-howl.png">
+<img id=weight-lifting-up src="./icons/weight-lifting-up.png">
+<img id=coffin src="./icons/coffin.png">
+<img id=cage src="./icons/cage.png">
+<img id=robe src="./icons/robe.png">
+<img id=cave-entrance src="./icons/cave-entrance.png">
+<img id=linked-rings src="./icons/linked-rings.png">
+<img id=swordman src="./icons/swordman.png">
+<img id=mounted-knight src="./icons/mounted-knight.png">
+<img id=templar-shield src="./icons/templar-shield.png">
+<img id=winged-sword src="./icons/winged-sword.png">
+<img id=third-eye src="./icons/third-eye.png">
+<img id=dwarf-face src="./icons/dwarf-face.png">
+<img id=ninja-mask src="./icons/ninja-mask.png">
+<img id=caveman src="./icons/caveman.png">
+<img id=hooded-assassin src="./icons/hooded-assassin.png">
+<img id=hiking src="./icons/hiking.png">
+<img id=magnet-man src="./icons/magnet-man.png">
+<img id=crown-of-thorns src="./icons/crown-of-thorns.png">
+<img id=vampire-dracula src="./icons/vampire-dracula.png">
+<img id=miner src="./icons/miner.png">
+<img id=hooded-figure src="./icons/hooded-figure.png">
+<img id=crow-nest src="./icons/crow-nest.png">
+<img id=archer src="./icons/archer.png">
+<img id=farmer src="./icons/farmer.png">
+<img id=pikeman src="./icons/pikeman.png">
+<img id=fire-silhouette src="./icons/fire-silhouette.png">
+<img id=fomorian src="./icons/fomorian.png">
+<img id=cultist src="./icons/cultist.png">
+<img id=public-speaker src="./icons/public-speaker.png">
+<img id=suspicious src="./icons/suspicious.png">
+<img id=read src="./icons/read.png">
+<img id=wisdom src="./icons/wisdom.png">
+<img id=robber src="./icons/robber.png">
+<img id=hoodie src="./icons/hoodie.png">
+<img id=ringmaster src="./icons/ringmaster.png">
+<img id=inspiration src="./icons/inspiration.png">
+<img id=wooden-crate src="./icons/wooden-crate.png">
+<img id=locked-chest src="./icons/locked-chest.png">
+<img id=freemasonry src="./icons/freemasonry.png">
+<img id=contortionist src="./icons/contortionist.png">
+<img id=castle src="./icons/castle.png">
+<img id=samara-mosque src="./icons/samara-mosque.png">
+<img id=forest-entrance src="./icons/forest-entrance.png">
+<img id=star-gate src="./icons/star-gate.png">
+<img id=cloaked-figure-on-horseback src="./icons/cloaked-figure-on-horseback.png">
+<img id=wooden-door src="./icons/wooden-door.png">
+<img id=closed-doors src="./icons/closed-doors.png">
+<img id=dungeon-gate src="./icons/dungeon-gate.png">
+<img id=powder src="./icons/powder.png">
+<img id=exit-door src="./icons/exit-door.png">
+<img id=fairy src="./icons/fairy.png">
+<img id=cheese-wedge src="./icons/cheese-wedge.png">
+<img id=ghost src="./icons/ghost.png">
+<img id=goblin-head src="./icons/goblin-head.png">
+<img id=rock-golem src="./icons/rock-golem.png">
+<img id=graveyard src="./icons/graveyard.png">
+<img id=tombstone src="./icons/tombstone.png">
+<img id=screaming src="./icons/screaming.png">
+<img id=bleeding-wound src="./icons/bleeding-wound.png">
+<img id=brick-pile src="./icons/brick-pile.png">
+<img id=lockpicks src="./icons/lockpicks.png">
+<img id=sparkles src="./icons/sparkles.png">
+<img id=lightning-saber src="./icons/lightning-saber.png">
+<img id=triple-gate src="./icons/triple-gate.png">
+<img id=brain src="./icons/brain.png">
+<img id=thumb-up src="./icons/thumb-up.png">
+<img id=strong src="./icons/strong.png">
+<img id=grass-mushroom src="./icons/grass-mushroom.png">
+<img id=egyptian-temple src="./icons/egyptian-temple.png">
+<img id=orc-head src="./icons/orc-head.png">
+<img id=hill-fort src="./icons/hill-fort.png">
+<img id=poison-bottle src="./icons/poison-bottle.png">
+<img id=skeleton src="./icons/skeleton.png">
+<img id=blood src="./icons/blood.png">
+<img id=spectre src="./icons/spectre.png">
+<img id=long-legged-spider src="./icons/long-legged-spider.png">
+<img id=stone-bust src="./icons/stone-bust.png">
+<img id=dead-wood src="./icons/dead-wood.png">
+<img id=crowbar src="./icons/crowbar.png">
+<img id=torch src="./icons/torch.png">
+<img id=crown-coin src="./icons/crown-coin.png">
+<img id=beech src="./icons/beech.png">
+<img id=baobab src="./icons/baobab.png">
+<img id=village src="./icons/village.png">
+<img id=broadsword src="./icons/broadsword.png">
+<img id=spider-web src="./icons/spider-web.png">
+<img id=well src="./icons/well.png">
+<img id=wolf-head src="./icons/wolf-head.png">
+<img id=forest src="./icons/forest.png">
+<img id=shambling-zombie src="./icons/shambling-zombie.png">
+<img id=raise-zombie src="./icons/raise-zombie.png">
+<img id=3d-stairs src="./icons/3d-stairs.png">
+<img id=amphora src="./icons/amphora.png">
+<img id=anvil-impact src="./icons/anvil-impact.png">
+<img id=arc-triomphe src="./icons/arc-triomphe.png">
+<img id=barbarian src="./icons/barbarian.png">
+<img id=basket src="./icons/basket.png">
+<img id=cash src="./icons/cash.png">
+<img id=church src="./icons/church.png">
+<img id=closed-doors src="./icons/closed-doors.png">
+<img id=coffin src="./icons/coffin.png">
+<img id=coins src="./icons/coins.png">
+<img id=conqueror src="./icons/conqueror.png">
+<img id=damaged-house src="./icons/damaged-house.png">
+<img id=desert-camp src="./icons/desert-camp.png">
+<img id=despair src="./icons/despair.png">
+<img id=dolmen src="./icons/dolmen.png">
+<img id=family-house src="./icons/family-house.png">
+<img id=flaming-sheet src="./icons/flaming-sheet.png">
+<img id=forest-camp src="./icons/forest-camp.png">
+<img id=gate src="./icons/gate.png">
+<img id=goblin-camp src="./icons/goblin-camp.png">
+<img id=horizon-road src="./icons/horizon-road.png">
+<img id=house src="./icons/house.png">
+<img id=log src="./icons/log.png">
+<img id=obelisk src="./icons/obelisk.png">
+<img id=open-chest src="./icons/open-chest.png">
+<img id=open-gate src="./icons/open-gate.png">
+<img id=open-treasure-chest src="./icons/open-treasure-chest.png">
+<img id=pay-money src="./icons/pay-money.png">
+<img id=river src="./icons/river.png">
+<img id=saloon src="./icons/saloon.png">
+<img id=samara-mosque src="./icons/samara-mosque.png">
+<img id=sarcophagus src="./icons/sarcophagus.png">
+<img id=shop src="./icons/shop.png">
+<img id=skull-crack src="./icons/skull-crack.png">
+<img id=spooky-house src="./icons/spooky-house.png">
+<img id=star-gate src="./icons/star-gate.png">
+<img id=steel-door src="./icons/steel-door.png">
+<img id=stone-bust src="./icons/stone-bust.png">
+<img id=stone-pile src="./icons/stone-pile.png">
+<img id=stone-stack src="./icons/stone-stack.png">
+<img id=sword-altar src="./icons/sword-altar.png">
+<img id=temple-gate src="./icons/temple-gate.png">
+<img id=underground-cave src="./icons/underground-cave.png">
+<img id=water-fountain src="./icons/water-fountain.png">
+<img id=waterfall src="./icons/waterfall.png">
+<img id=wood-cabin src="./icons/wood-cabin.png">
+
+
+
+
+
+
+
+
+
+
+
+
+
+</div>
+</body>
+</html>
