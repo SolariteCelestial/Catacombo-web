@@ -1,0 +1,20 @@
+pirate should have booze, not poison
+* charm and poison is missing combo somehow
+* I forgot to update player combos, shit
+
+if you only have one treasure left as a result of a tradeback, time still passes in town
+
+//the edge avoidance stuff is breaking things that spawn near the edge, just remove it I guess
+//that isn't it, it's several things wrong with levelgen in the village
+
+
+* consider guaranteeing at least one treasure in the graves
+* maybe itemdrop forces one exactly once if it's treasure
+
+not resetting the position of item cards dealt at round start
+
+* you SOMETHING SOMETHING and also typo in the resultant event when buying lockpick at saloon
+* also accidentally got sage flag that way
+* that thing is ALL KINDS of broken apparently
+* battlefield levelgen also broken "cardspush"
+

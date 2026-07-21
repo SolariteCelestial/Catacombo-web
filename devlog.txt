@@ -1,0 +1,148 @@
+prior to jam
+	added support to my basic game library code for dragging, dropping and combining cards
+	wrote some backend database tools for handling the combinatorial explosion I have unwisely decided to create
+
+		principles of the game:  1) the only thing you do is combine cards
+					 2) every possible combination is supported
+					 	(sometimes all you get is a joke, but you at least get that.)
+					 	
+	did some brainstorming about basic mechanics, character classes, locations, interactions
+	fully outlined/themed/named a reasonably-scoped (I hope) set of levels,
+	
+day 1a)
+	very short, didn't start until late afternoon when the jam officially began, and spent a lot of the evening on an airplane
+	adapted the card library test project to work the way the game needs to work
+	wrote data export from the database and made sure I could easily paste it into a JS library file for the game to use
+	made the full set of location cards and interactions, content complete except for icon selection, which was a hassle to do on the plane
+	
+day 1b)
+	another very short day, at my in-laws' house, managed to work for (1.5ish hours) starting at 4am before everybody else got up.
+		got the first tier of classes spindled and combos handled and written.  six explodes way more than four does.  this is gonna be a lot of work!
+		
+day 2)
+	second day at in-laws' house brief period in morning
+		added third tier of classes
+		filled out the matrix of basic stat combos
+		added HP/sanity system and readout, though no fail state (or even time passage system) yet
+		continued backend tool improvement
+	on the flight
+		worked on filling in pile of missing combos for the initial basic set of player cards
+		finished that!  Okay, so now adding a new dungeon monster or hazard or shrine is a pretty well-defined task, and won't take a ton of time.
+		adding a new player card is going to be more work, and then it'll have to be filled in for every dungeon card
+			these are manageable.  this is going to work.
+
+day 3)
+	early start day at office, locked in, let's do this.
+	dungeon cards for "graves" type
+	added "tool" player card
+	added support for basic containers
+	added time passage system, injury/horror, game-loss state
+	added quality tier display to cards, WIP
+	added support for doors unlocking new branches
+		(these can be arbitrarily complex/custom, which I was worried wouldn't be the case)
+	added a couple of new character unlocks
+	added stat decks for every class
+		(still need to do other perks)
+	updated game flow, added treasure -> store -> restart loop
+	added basic system for NPC stores in town
+		beggar and statue done so far
+	
+day 4)
+	woke up at 3am thinking about it, yes ha ha ha, yes.
+	finished some missing class combo writing
+	started on combos for forest cards
+		finished the three monsters, spider web door type, mushroom ring
+	did some visual polish to procrastinate those combos
+	forest level gen and village unlock
+	finished level, church unlock, most NPC stores in town
+	
+day 5)
+	woke up not hung over and fairly enthusiastic, despite intense and mentally-taxing trivia experience last night
+	I have to get most of the rest of the levels done today if I'm gonna have a day to polish.  Luckily I think most of the dungeon cards that I need are in place.
+	finished saloon, upgrades
+	improved stat card draw VFX, feels nicer now
+	made darkness, approach, locked container dungeon cards
+	made spectre and caster enemies, only eight cards left to make (apart from endgame)
+	made barrow level type
+	wolf enemy
+	made debug unlock card for easier testing of stuff
+	made banditcamp, dungeon, darkforest level types
+	finished all of the dungeon cards on the list, orc, statue, trapped hallway, golem
+	finished all second tier level gen
+
+day 6)
+	woke up with a pretty good idea of how the whole game progression works
+		good ending = ring both bells, unlock everybody for easy defeat of dark lord as Demigod
+	TODO: create last 3 player cards and combos, this is maybe a good early morning project
+	TODO: figure out what this TODO was supposed to be?  third-tier locations is a good guess I bet
+	TODO: publish playtest build on asymmetric, try to get at least a placeholder of the final fight 
+	made magicweapon and charm and magicartifact player cards.
+	finished battlefield (w/ soldier unlock), taintedforest, bell tech, necropolis
+	everything else on the list outside of polish.  and with like ten minutes to spare to go get Zoe.  pshew.
+
+day 7)
+	fixed some bugs from playtest
+	music system (Allegro by Emmit Fenn)
+	tons of playtesting, fixing some very disruptive bugs in level gen
+	fixed some infinite combos Kevin found
+	added particle effects to title and interstitial game screens
+	
+list of things to do:
+	[x] bugs / diligence [x] change the way adjectives work, they currently replace the name with the prototype name [x] just make it a list? [x] fix adjective problem, worrisome... [x] remove debug treasure stuff
+		[x] test levelgen aggressively, just call the function for each one a thousand times to make sure no errors occur
+			[x] actual playtest using the debug function I made
+		[x] before playtest build, read all dungeon combos in the editor to make sure there are no failures of container/door possible.
+	[x] remaining player items (after all dungeon items I think, just to avoid multiple extra passes in both directions) [x] artifact player card [x] magicweapon player card [x] magicartifact player card
+	[x] remaining dungeon cards [x] darkness [x] approach [x] locked container [x] level 2 monsters (can we get away with just four? no, added caster) [x] wolf [x] orc [x] stone golem [x] spectre [x] caste [x] trapped hallwa [x] statue
+	[x] basic systems [x] time passage system [x] injury and horror handling [x] monster injury & [x] game over state	[x] messages about how long is left in tutorialtext() [x] game win state [x] character loss event, -> reincarnate [x] monster drops system [x] dungeon exit system [x] event system for unlocking stuff
+	[x] permaflag preview system (this is the only thing that is preserved across playthroughs, and you could just be writing it down if you wanted) [x] debug version for the meantime
+	[x] connnnnnnnnntennnnnnnnnnnt [x] tier 4 classes [x] tier 5 classes [x] basic container and contents object
+		[x] sprinkle some charms into various places
+		[x] remaining writing for class combos
+		[x] dungeon cards and level gen for all locations [x] cemetery [x] put a couple of things behind a gate to make it less initially crowded [x] prevent more than one monster, and make it always a skeleton or zombie to tutorialize injury [x] woods [x] spider web as a challenging door, this can be reused in deeper locations [x] add a two-web-deep event where you discover the village [x] village [x] cave [x] barrow [x] banditcamp [x] darkforest [x] mausoleum [x] catacomb [x] dungeon [x] higher level ones, reuse a LOT of the cards from the below [x] battlefield [x] taintedforest [x] bell for good endin [x] orcfortres [x] unlock scoundrel [x] necropolis [x] bell for good ending
+			[x] dark citadel
+				[x] boss, requires magic weapon
+				[x] gate, requires magic artifact
+				[x] statues outside, which can hopefully be used to make both with stuff brought in
+				[x] one resonator that can be destroyed by any card (handle in processcombination) if you rang each bell for good ending  (not exactly this but stil)
+		[x] progression [x] unlock dirtbag [x] unlock scholar [x] unlock sage [x] unlock soldier [x] unlock woods (with explorer in town) [x] unlock village [x] unlock cave [x] basic door card and branch objects
+	[x] many basic dungeon cards (after we're sure the basic set of player cards is enough to be interesting and the combos are comprehensive.) [x] and all their interactions with player cards (this is all well underway)
+	[x] actual class data, card decks, stats, etc. [x] mus/myst/mox draws [x] HP and sanity [x] starting cards, if any
+	[x] support tier display on cards
+	[x] more player cards [x] basics, weapon, healing(food), dust, slime, keys/lockpicks, booze [x] combos for all of those
+	[x] enough tutorial text for playtesting
+	[x] treasure system [x] treasure combo system, both in and out of dungeon?  how do we stop people from wasting gold going higher than 3. (just prevent it, it's fine there.)
+	[x] NPC shopkeepers [x] pawn shop, 1) start with a junk, 2) map to another zone? 3) start with a weapon [x] saloon, 1) buy booze 3) upgrade health for future characters [x] church, do what 1) buy food, 3) upgrade sanity for future characters [x] tower of gold in town [x] explorer to unlock second area
+	[ ] polish [x] switch font to Sina [x] smarter card dealing, try to stay out of the way of other cards [x] deal card near mouse argument [x] dungeon cards further away from the edges, automatically do two rows [x] reflect quality tier in card text [x] this looked bad, try to figure out a border method or something [x] better text presentation.  area at bottom of screen? [x] layout of class cards and location cards [x] better flow of time passage, timing is weird and potentially confusing now [x] iconic health/sanity presentation [x] adjust timing to make it clearer what's going on when Time Passes. (not perfect, but the icons are way more visible and make it clearer, plus there's tutorial text now) [x] background images for remaining levels
+		[ ] collapse shorter words in card name into multiple lines
+		[x] title screen
+		[x] game over
+		[x] go over and improve event writing
+		[x] audio [x] sounds -- based on the card?  that seems like a lot.  maybe if there's time. [x] music - ambience for soul selection and travel, music for dungeon and town.
+		[x] write up credits for the icons I used
+	
+NICE-TO-HAVE
+	[ ] some more unique containers and level-specific bits for the levels I made in a hurry.
+
+CUT
+		[ ] class thematic perks and starting cards for specific tier 2+ classes
+			[ ] ex. higher chance of item drops / better loot in containers / healer, magic will cure wounds?
+	[ ] "unique" system
+		[ ] make a special flavored version of an item that is functionally equivalent
+			[ ] gold version of card.  I think they will all be regular player cards.
+			[x] support changing its icon, and a separate database table for icons that aren't in the cards table
+				[x] add those spare icons to the icon output
+		[ ] make one of these for each item type
+			[ ] maybe several for magic weapons or artifacts
+		[/] wandering monsters in higher levels (tier 2 every 2 turns, tier 3 every turn?  or maybe 2/3) (this is not necessary if doors tend to unleash multiple monsters.  let the player pace themselves.  just make sure you can't get deadlocked.  just always put the exit behind normal or stat2-doors.)
+	[ ] even more player cards as the dungeon cards suggest needs for them (seems somewhat unlikely now)
+		[ ] add to currentmessage when a container has contents, it feels weird without it
+	[ ] throb HP and Sanity icons that are currently under threat
+	
+ARCHIVED TEMP NOTES TO MYSELF
+[x] NEXT: finish saloon events
+items I have added create() for but not put in the data
+	magicweapon
+items I have plans for
+	artifact, another thing kinda like junk but acts as keys to dungeon stuff
+	holy symbol, magic version of that
