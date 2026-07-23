@@ -17,6 +17,9 @@ font-style: normal; }
 		-webkit-user-select: none;
 		user-select: none;
 		-webkit-touch-callout: none;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 	#c {
 		touch-action: none;
@@ -70,9 +73,29 @@ var soundsthisframe=0;
 var godmode=0; // testing
 var refundedtreasure=0;
 
+function resizeCanvasToFit() {
+	// Scale the canvas (via CSS) to fit the viewport while preserving the
+	// game's native 1200x900 aspect ratio. We do this explicitly in JS
+	// rather than relying on CSS max-width/max-height + auto sizing,
+	// because mobile browsers don't reliably compute an intrinsic
+	// aspect ratio for <canvas> the way they do for <img>, which was
+	// causing the canvas to render at its native 1200x900 size (and get
+	// clipped by the page's overflow:hidden) instead of scaling down.
+	var canvasEl = document.getElementById("c");
+	if (!canvasEl) return;
+	var availableWidth = window.innerWidth;
+	var availableHeight = window.innerHeight;
+	var scale = Math.min(availableWidth / gamewidth, availableHeight / gameheight);
+	canvasEl.style.width = Math.floor(gamewidth * scale) + "px";
+	canvasEl.style.height = Math.floor(gameheight * scale) + "px";
+}
+
 function init() {
 	canvas = document.getElementById("c");
 	ctx = canvas.getContext("2d");
+	resizeCanvasToFit();
+	window.addEventListener('resize', resizeCanvasToFit);
+	window.addEventListener('orientationchange', resizeCanvasToFit);
 	setInterval("drawscreen()",10); // framerate
 
 	keysdown[37]=0; keysdown[38]=0; keysdown[39]=0; keysdown[40]=0; // wasd
@@ -1503,7 +1526,7 @@ function changemusicspeed(targetSpeed, duration = 1000) {
 
 <body onLoad='init();'>
 <div style='width:100vw; height:100vh; display:flex; align-items:center; justify-content:center;'>
-<canvas id="c" width="1200" height="900" style='border: 1px solid black; max-width:100vw; max-height:100vh; width:auto; height:auto; object-fit:contain;'></canvas>
+<canvas id="c" width="1200" height="900" style='border: 1px solid black; display:block; margin:0 auto;'></canvas>
 </div>
 
 <div style='visibility: hidden; display: none;'>
